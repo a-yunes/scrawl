@@ -859,6 +859,8 @@ impl SettingsWindow {
         div()
             .id("settings-content")
             .flex_1()
+            // Long captions wrap to the pane instead of widening it.
+            .min_w(px(0.0))
             .h_full()
             .bg(theme.window())
             .relative()
