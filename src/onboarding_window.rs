@@ -96,6 +96,8 @@ struct ViewState {
     count: usize,
     rows: Vec<RowState>,
     ready: bool,
+    /// Gone from `onboarding::View` (Scrawl reopens by itself now); kept for older senders.
+    #[serde(default)]
     relaunch: bool,
     fix: bool,
 }
@@ -250,8 +252,12 @@ impl OnboardingWindow {
     fn handle(&mut self, message: serde_json::Value, window: Option<&mut Window>) -> bool {
         match message["type"].as_str().unwrap_or_default() {
             "state" => {
-                let Ok(next) = serde_json::from_value::<ViewState>(message) else {
-                    return true;
+                let next = match serde_json::from_value::<ViewState>(message) {
+                    Ok(next) => next,
+                    Err(error) => {
+                        crate::capture::scrawl_log(format!("onboarding: bad state: {error}"));
+                        return true;
+                    }
                 };
                 if let Some(ref old) = self.state
                     && old.step != next.step
