@@ -34,14 +34,12 @@ enum Permissions {
       "screen-recording": CGPreflightScreenCaptureAccess() ? "granted" : "not-determined",
       "microphone": av(.audio),
       "accessibility": AXIsProcessTrusted() ? "granted" : "not-determined",
-      "camera": av(.video),
     ]
   }
 
   static func request(_ permission: String) {
     switch permission {
     case "microphone": AVCaptureDevice.requestAccess(for: .audio) { _ in }
-    case "camera": AVCaptureDevice.requestAccess(for: .video) { _ in }
     case "accessibility":
       let prompt = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
       _ = AXIsProcessTrustedWithOptions([prompt: true] as CFDictionary)

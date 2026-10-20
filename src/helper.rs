@@ -87,14 +87,6 @@ fn os(s: &str) -> &std::ffi::OsStr {
     std::ffi::OsStr::new(s)
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct PhoneDevice {
-    pub id: String,
-    pub name: String,
-    pub model: String,
-    pub width: u32,
-    pub height: u32,
-}
 
 /// What macOS has granted Scrawl, from a fresh helper process (a long-running one can miss a
 /// Screen Recording grant).
@@ -103,11 +95,6 @@ pub fn permissions()
     run(&[os("permissions")], Duration::from_secs(5))
 }
 
-/// Cabled iPhones and iPads, from the USB registry (no camera permission needed). `id` is the
-/// USB serial and the size is unknown until the mirror attaches.
-pub fn devices() -> Result<Vec<PhoneDevice>> {
-    run(&[os("devices")], Duration::from_secs(5))
-}
 
 #[derive(Deserialize)]
 struct Transcript {
@@ -342,15 +329,4 @@ pub fn frames(movie: &Path, times: FrameTimes, max_edge: u32) -> Result<Vec<Rgba
         let _ = std::fs::remove_dir_all(dir);
     });
     frames
-}
-
-#[derive(Deserialize)]
-struct QrOutput {
-    qr: String,
-}
-
-/// Renders `text` as a compact Unicode half-block QR code for the terminal via CoreImage.
-pub fn qr(text: &str) -> Result<String> {
-    let out: QrOutput = run(&[os("qr"), os(text)], Duration::from_secs(5))?;
-    Ok(out.qr)
 }

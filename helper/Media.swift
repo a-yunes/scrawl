@@ -19,7 +19,7 @@ struct SpeechChoice {
 }
 
 /// Apple's speech assets are installed per app: `AssetInventory` reserves the locale for this
-/// bundle id (`dev.kitlangton.scrawl.helper`) and downloads the model if the Mac doesn't have it.
+/// bundle id (`dev.ayunes.scrawl.local.helper`) and downloads the model if the Mac doesn't have it.
 /// A fresh Mac has none, so Scrawl installs it in the background at launch
 /// (`scrawl-helper speech-model --install`) rather than in the middle of a capture.
 enum SpeechModel {

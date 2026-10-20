@@ -1,5 +1,5 @@
 //! The capsule's motion plumbing: one animation clock that can run slow, springs and durations
-//! that can be tuned live from `~/.config/scrawl/tune.json` (debug builds), and a per-frame trace
+//! that can be tuned live from `~/.config/scrawl-local/tune.json` (debug builds), and a per-frame trace
 //! in motion-lint's format (`SCRAWL_MOTION_TRACE=<file>`). Each costs nothing when it's off.
 
 use std::cell::{Cell, RefCell};
@@ -289,7 +289,7 @@ pub(super) fn tune_path() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("SCRAWL_TUNE") {
         return Some(PathBuf::from(path));
     }
-    dirs::home_dir().map(|home| home.join(".config/scrawl/tune.json"))
+    dirs::home_dir().map(|home| home.join(".config/scrawl-local/tune.json"))
 }
 
 struct TuneState {

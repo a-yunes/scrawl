@@ -31,7 +31,6 @@ const TAIL_TIMEOUT: Duration = Duration::from_secs(6);
 pub fn wanted() -> bool {
     cfg!(target_os = "macos")
         && crate::handoff::experiment(crate::handoff::LIVE_TRANSCRIBE)
-        && crate::transcribe::Engine::preferred() == crate::transcribe::Engine::Apple
 }
 
 pub struct Live {

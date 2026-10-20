@@ -1,5 +1,5 @@
 //! Which microphone Mac captures record from: `"microphone": {"id", "name"}` in
-//! `~/.config/scrawl/config.json` (absent = the macOS default, followed as it changes). The id is
+//! `~/.config/scrawl-local/config.json` (absent = the macOS default, followed as it changes). The id is
 //! the CoreAudio device UID, which is also `AVCaptureDevice.uniqueID`; the name is kept only to
 //! say which device is missing. A chosen device that isn't connected falls back to the default.
 
@@ -386,10 +386,8 @@ mod tests {
         std::fs::write(&path, r#"{"microphone":42,"ingestToken":"kept"}"#).unwrap();
         assert_eq!(choice_in(&path), None);
         assert_eq!(
-            crate::handoff::load_config_from(&path)
-                .ingest_token
-                .as_deref(),
-            Some("kept"),
+            serde_json::from_slice::<serde_json::Value>(&std::fs::read(&path).unwrap()).unwrap()["ingestToken"],
+            "kept",
             "a bad microphone value never drops the rest"
         );
         let _ = std::fs::remove_dir_all(&dir);

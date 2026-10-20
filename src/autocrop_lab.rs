@@ -2,7 +2,7 @@
 //! captures built through the real pipeline (`scrawl fixture`), and the scorer that compares
 //! crops with hand-labelled ground truth (`scrawl autocrop-eval`).
 
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -240,89 +240,6 @@ pub fn export(dir: &Path, bundle: &ScrawlBundle) -> Result<PathBuf> {
     Ok(page)
 }
 
-/// Serves the playground on `127.0.0.1:port`: the page, the bundle's files, and `POST /crop`,
-/// which runs the crop with the posted settings.
-pub fn serve(dir: &Path, bundle: &ScrawlBundle, port: u16, open: bool) -> Result<()> {
-    let listener = std::net::TcpListener::bind(("127.0.0.1", port))?;
-    let url = format!(
-        "http://127.0.0.1:{}/autocrop/",
-        listener.local_addr()?.port()
-    );
-    println!("{url}");
-    if open {
-        let _ = crate::handoff::open_path(std::path::Path::new(&url));
-    }
-    let input = input_for_bundle(dir, bundle);
-    let page = playground_page(dir, bundle, true)?;
-    let root = dir.canonicalize()?;
-    for stream in listener.incoming() {
-        let Ok(mut stream) = stream else { continue };
-        let _ = (|| -> Result<()> {
-            let mut reader = BufReader::new(stream.try_clone()?);
-            let mut line = String::new();
-            reader.read_line(&mut line)?;
-            let mut parts = line.split_whitespace();
-            let (method, path) = (parts.next().unwrap_or(""), parts.next().unwrap_or("/"));
-            let mut length = 0;
-            loop {
-                let mut header = String::new();
-                reader.read_line(&mut header)?;
-                if header.trim().is_empty() {
-                    break;
-                }
-                if let Some((k, v)) = header.split_once(':')
-                    && k.eq_ignore_ascii_case("content-length")
-                {
-                    length = v.trim().parse().unwrap_or(0);
-                }
-            }
-            let (status, kind, body): (&str, &str, Vec<u8>) = match (method, path) {
-                ("POST", "/crop") => {
-                    let mut buf = vec![0; length];
-                    reader.read_exact(&mut buf)?;
-                    match serde_json::from_slice::<Settings>(&buf) {
-                        Ok(s) => (
-                            "200 OK",
-                            "application/json",
-                            serde_json::to_vec(&autocrop::compute(&input, &s))?,
-                        ),
-                        Err(e) => ("400 Bad Request", "text/plain", e.to_string().into_bytes()),
-                    }
-                }
-                ("GET", "/" | "/autocrop/" | "/autocrop/index.html") => (
-                    "200 OK",
-                    "text/html; charset=utf-8",
-                    page.clone().into_bytes(),
-                ),
-                ("GET", p) => {
-                    let rel = p.trim_start_matches('/').split('?').next().unwrap_or("");
-                    let rel = rel.replace("%20", " ");
-                    let file = root.join(&rel);
-                    match file.canonicalize() {
-                        Ok(f) if f.starts_with(&root) && f.is_file() => {
-                            let kind = if rel.ends_with(".png") {
-                                "image/png"
-                            } else {
-                                "application/octet-stream"
-                            };
-                            ("200 OK", kind, std::fs::read(f)?)
-                        }
-                        _ => ("404 Not Found", "text/plain", b"not found".to_vec()),
-                    }
-                }
-                _ => ("405 Method Not Allowed", "text/plain", Vec::new()),
-            };
-            write!(
-                stream,
-                "HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
-                body.len()
-            )?;
-            stream.write_all(&body)?;
-            Ok(())
-        })();
-    }
-    Ok(())
-}
 
 // ---------------------------------------------------------------------------------------------
 // Simulated captures
@@ -442,7 +359,7 @@ pub fn build_fixture(
     )?;
     let truth = base.join("truth.json");
     if truth.is_file() {
-        std::fs::copy(truth, out.join("truth.json"))?;
+        crate::privacy::copy_private(truth, out.join("truth.json"))?;
     }
     Ok(out.to_path_buf())
 }
@@ -609,7 +526,7 @@ pub fn simulate_capture(
     let video = match movie {
         Some(m) => {
             let dest = out.join("recording.mp4");
-            std::fs::copy(m, &dest)?;
+            crate::privacy::copy_private(m, &dest)?;
             Some(dest)
         }
         None => None,

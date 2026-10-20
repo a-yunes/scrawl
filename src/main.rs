@@ -1,3 +1,6 @@
+#[cfg(not(target_os = "macos"))]
+compile_error!("Scrawl Local supports macOS only");
+
 mod agent_context;
 mod audio;
 mod autocrop;
@@ -11,12 +14,10 @@ mod autocrop_lab;
 mod capture;
 #[cfg_attr(target_os = "windows", path = "win/command_line.rs")]
 mod command_line;
-mod delivery;
 mod export;
 mod handoff;
 #[cfg_attr(target_os = "windows", path = "win/helper.rs")]
 mod helper;
-mod hex;
 mod hold;
 mod icons;
 mod inbox;
@@ -28,22 +29,16 @@ mod mic;
 mod model;
 mod native;
 mod onboarding;
-mod onboarding_window;
-mod page;
-mod phone;
+mod movie;
+mod privacy;
 mod render;
 mod retention;
-mod routing;
 mod screens;
 mod settings;
-mod settings_window;
 mod sketch;
-#[cfg(target_os = "macos")]
-mod sparkle;
 mod speech_model;
 mod transcribe;
 mod ui;
-mod web;
 #[cfg(target_os = "windows")]
 mod win;
 mod windows;
@@ -77,50 +72,7 @@ struct Cli {
     command: Option<Command>,
 }
 
-fn parse_engine(name: &str) -> Result<crate::transcribe::Engine, String> {
-    crate::transcribe::Engine::parse(name).ok_or_else(|| "expected `apple` or `hex`".to_owned())
-}
 
-/// `scrawl hex status`: connection, models and what the next recording would use.
-fn hex_status() {
-    let preferred = transcribe::Engine::configured();
-    println!("Preferred transcriber: {}", preferred.name());
-    let configured = handoff::hex_model();
-    println!(
-        "Hex model setting: {}",
-        configured.as_deref().unwrap_or("(automatic)")
-    );
-    println!("Discovery file: {}", hex::discovery_path().display());
-    let status = match hex::status() {
-        Ok(status) => status,
-        Err(error) => {
-            println!("Hex: not connected ({error:#})");
-            println!("Next recording uses: {}", transcribe::LOCAL_ENGINE_TITLE);
-            return;
-        }
-    };
-    println!("Hex: connected, version {}", status.version);
-    for model in &status.models {
-        let state = match (model.installed, model.verified) {
-            (true, true) => "ready",
-            (true, false) => "installed, not verified",
-            _ => "not installed",
-        };
-        println!("  {}\t{state}", model.id);
-    }
-    let chosen = hex::pick_model(&status.models, configured.as_deref());
-    println!(
-        "Hex model in use: {}",
-        chosen.as_deref().unwrap_or("none ready")
-    );
-    println!(
-        "Next recording uses: {}",
-        match (preferred, chosen) {
-            (transcribe::Engine::Hex, Some(model)) => format!("Hex ({model})"),
-            _ => transcribe::LOCAL_ENGINE_TITLE.to_owned(),
-        }
-    );
-}
 
 #[derive(Subcommand)]
 enum MicCommand {
@@ -152,11 +104,6 @@ fn mic_list() {
     }
 }
 
-#[derive(Subcommand)]
-enum HexCommand {
-    /// Whether Hex is connected, its version, ready models and the transcriber Scrawl will use.
-    Status,
-}
 
 #[derive(Subcommand)]
 enum LabCommand {
@@ -200,9 +147,6 @@ enum Command {
         /// Start a capture session immediately on launch.
         #[arg(long)]
         record: bool,
-        /// Start capturing the cabled iPhone immediately on launch.
-        #[arg(long, conflicts_with = "record")]
-        iphone: bool,
     },
     /// Generate a realistic annotated demo bundle (contact sheet + keyframes + transcript).
     Demo {
@@ -218,9 +162,6 @@ enum Command {
         /// Optional window title or app substring to target.
         #[arg(long)]
         window: Option<String>,
-        /// Capture the cabled iPhone instead of the screen (live mirror window + native video).
-        #[arg(long, conflicts_with = "window")]
-        iphone: bool,
         /// Recording duration in seconds (default: 5).
         #[arg(long, default_value_t = 5)]
         duration: u64,
@@ -231,28 +172,6 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
-    /// Build a bundle from a ScrawlKit in-app recording (`.mp4` + timeline `.json`).
-    Import {
-        /// The recording or its timeline; defaults to the newest pair in ~/Downloads.
-        recording: Option<PathBuf>,
-        /// Timeline JSON, when it isn't beside the recording with the same name.
-        #[arg(long)]
-        timeline: Option<PathBuf>,
-        /// Optional note to attach to the bundle.
-        #[arg(long)]
-        note: Option<String>,
-        /// Output `.scrawl` bundle directory.
-        #[arg(long)]
-        out: Option<PathBuf>,
-        /// Copy the summary to the clipboard.
-        #[arg(long)]
-        clipboard: bool,
-        /// Transcribe with `apple` or `hex` instead of the configured transcriber.
-        #[arg(long, value_parser = parse_engine)]
-        transcriber: Option<crate::transcribe::Engine>,
-    },
-    /// List cabled iPhones and iPads that can be captured.
-    Devices,
     /// Try a one-frame ScreenCaptureKit capture in this process and print the result as JSON,
     /// once or (with `--watch`) every second, to see whether a Screen Recording grant reaches a
     /// running process. Asks for Screen Recording if it was never decided.
@@ -285,9 +204,6 @@ enum Command {
         /// many times real time first, as if recording, so the finish only transcribes the tail.
         #[arg(long, hide = true, requires = "bench")]
         live_speed: Option<f64>,
-        /// Transcribe with `apple` or `hex` instead of the configured transcriber.
-        #[arg(long, value_parser = parse_engine)]
-        transcriber: Option<crate::transcribe::Engine>,
         /// Turn an experiment on for this run, as `"experiments"` in `config.json` would
         /// (e.g. `agentContext`). Repeatable.
         #[arg(long = "experiment", value_name = "NAME")]
@@ -300,7 +216,7 @@ enum Command {
         #[command(subcommand)]
         command: LabCommand,
     },
-    /// Tune the capsule's springs live: edits `~/.config/scrawl/tune.json`, which debug builds
+    /// Tune the capsule's springs live: edits `~/.config/scrawl-local/tune.json`, which debug builds
     /// (the lab and the installed app) re-read within a quarter second.
     #[command(hide = true)]
     Tune {
@@ -311,11 +227,6 @@ enum Command {
     Mic {
         #[command(subcommand)]
         command: MicCommand,
-    },
-    /// Check the Hex transcriber: is it running, which models are ready, which one Scrawl uses.
-    Hex {
-        #[command(subcommand)]
-        command: HexCommand,
     },
     /// Print the agent-ready summary or JSON manifest for a `.scrawl` bundle (or `latest`).
     Inspect {
@@ -439,11 +350,6 @@ enum Command {
         /// Open the playground in the default browser.
         #[arg(long)]
         open: bool,
-        /// Serve the playground on localhost so the sliders rerun the crop.
-        #[arg(long)]
-        serve: bool,
-        #[arg(long, default_value_t = 0)]
-        port: u16,
     },
     /// Build a bundle from a simulated Screen capture (`scripts/autocrop-corpus.mjs`).
     #[command(hide = true)]
@@ -497,39 +403,10 @@ enum Command {
         #[arg(long, default_value_t = 1)]
         repeat: u32,
     },
-    /// Copy a `.scrawl` bundle to the clipboard or send it to an OpenCode V2 session.
-    Send {
-        /// Path to `.scrawl` bundle directory or `latest`.
+    /// Copy a capture's summary to the clipboard for manual pasting.
+    Copy {
         #[arg(default_value = "latest")]
         bundle: PathBuf,
-        /// Target OpenCode session ID (`ses_...`). If omitted, an iPhone recording goes to the
-        /// session it was addressed to, a Mac capture of a dev site to the session it was routed
-        /// to, anything else to the most recent active session.
-        #[arg(long)]
-        session: Option<String>,
-        /// Send an iPhone recording to `--session` even though it was addressed to another.
-        #[arg(long)]
-        reroute: bool,
-        /// Copy to the macOS clipboard instead of posting to OpenCode.
-        #[arg(long)]
-        clipboard: bool,
-    },
-    /// Print which OpenCode session a capture of a browser tab would be sent to, without
-    /// sending: a page registered through `/sdk.js`, else the project serving a localhost port.
-    ///
-    /// With `--explain <bundle>`, prints the evidence smart routing sees for that capture, the
-    /// sessions it weighed and their scores, and its decision (read-only). `--url` stands in for
-    /// the tab when the bundle didn't save one.
-    Route {
-        /// The tab's URL.
-        #[arg(long, conflicts_with = "browser")]
-        url: Option<String>,
-        /// Read the front tab of this browser instead (bundle ID, e.g. `com.brave.Browser`).
-        #[arg(long)]
-        browser: Option<String>,
-        /// A `.scrawl` bundle (or `latest`) to explain.
-        #[arg(long, value_name = "BUNDLE")]
-        explain: Option<PathBuf>,
     },
     /// Open a `.scrawl` bundle in the native GPUI review window.
     Preview {
@@ -540,39 +417,11 @@ enum Command {
         #[arg(long)]
         capture_screenshot: Option<PathBuf>,
     },
-    /// Print a `<scheme>://scrawl?url=…&token=…` setup link (and QR code) for ScrawlKit on iPhone.
-    #[command(alias = "tether-link")]
-    Link {
-        /// URL scheme of the iOS app (for example `updown`).
-        #[arg(long)]
-        scheme: String,
-        /// Scrawl ingest base URL(s); defaults to this Mac's Tailscale and LAN IPs on `--port`.
-        #[arg(long = "url")]
-        urls: Vec<String>,
-        /// Optional OpenCode session ID (`ses_...`) to route captures from this app to.
-        #[arg(long)]
-        session: Option<String>,
-        /// Ingest port used when discovering default Tailscale / LAN URLs.
-        #[arg(long, default_value_t = phone::DEFAULT_INGEST_PORT)]
-        port: u16,
-    },
-    /// Run the headless ScrawlKit ingest server (HTTP + optional USB watcher, no GUI or clipboard).
-    Serve {
-        /// TCP port to listen on.
-        #[arg(long, default_value_t = phone::DEFAULT_INGEST_PORT)]
-        port: u16,
-        /// Also poll cabled iPhones over USB (`devicectl`) for apps listed in `usbApps`.
-        #[arg(long)]
-        usb: bool,
-        /// Build bundles without posting them to an OpenCode session.
-        #[arg(long)]
-        no_opencode: bool,
-    },
-    /// Print the agent skill that teaches coding agents to read captures and use this CLI (`bunx skills add kitlangton/scrawl` installs it).
+    /// Print the bundled guide for agents to inspect local captures.
     Skill,
 }
 
-/// `skills/scrawl/SKILL.md`, the same text `bunx skills add kitlangton/scrawl` installs.
+/// The bundled guide for the local-only CLI.
 const SKILL: &str = include_str!("../skills/scrawl/SKILL.md");
 
 pub fn now_epoch_ms() -> u64 {
@@ -1451,6 +1300,7 @@ pub fn generate_demo_bundle(out: Option<PathBuf>) -> Result<(PathBuf, ScrawlBund
 }
 
 fn main() -> Result<()> {
+    privacy::initialize();
     if std::env::var_os("SCRAWL_BENCH_START").is_some() {
         ui::run_start_benchmark();
         return Ok(());
@@ -1468,17 +1318,16 @@ fn main() -> Result<()> {
         }
         None => Command::App {
             record: false,
-            iphone: false,
         },
     };
     match command {
-        Command::App { record, iphone } => {
+        Command::App { record } => {
             #[cfg(target_os = "windows")]
             {
                 win::shell::release_own_console();
                 win::shell::wait_for_relauncher();
             }
-            ui::run_app(None, record, iphone, None);
+            ui::run_app(None, record, None);
             Ok(())
         }
         Command::Demo { out, clipboard } => {
@@ -1491,46 +1340,6 @@ fn main() -> Result<()> {
         }
         Command::Record {
             window,
-            iphone: true,
-            duration,
-            note,
-            out,
-        } => {
-            let bundle_dir = out.unwrap_or_else(|| {
-                handoff::default_captures_dir().join(format!("{}.scrawl", make_bundle_id()))
-            });
-            std::fs::create_dir_all(&bundle_dir)?;
-            let dev_id = window.or_else(|| {
-                helper::devices()
-                    .ok()
-                    .and_then(|mut d| d.drain(..).next().map(|p| p.id))
-            });
-            let session = phone::PhoneSession::start(
-                &bundle_dir.join("recording.mov"),
-                dev_id.as_deref(),
-                None,
-            )?;
-            let started = std::time::Instant::now();
-            while !session.has_recording()
-                && !session.has_ended()
-                && started.elapsed() < Duration::from_secs(15)
-            {
-                std::thread::sleep(Duration::from_millis(50));
-            }
-            let record_started = std::time::Instant::now();
-            let target_dur = Duration::from_secs(duration.max(1));
-            while !session.has_ended() && record_started.elapsed() < target_dur {
-                std::thread::sleep(Duration::from_millis(50));
-            }
-            let recording = session.stop()?;
-            let (_dir, _bundle, summary) =
-                phone::finalize_live_capture(&bundle_dir, recording, Vec::new(), Vec::new(), note)?;
-            print!("{summary}");
-            Ok(())
-        }
-        Command::Record {
-            window,
-            iphone: false,
             duration,
             note,
             out,
@@ -1573,30 +1382,6 @@ fn main() -> Result<()> {
             print!("{summary}");
             Ok(())
         }
-        Command::Import {
-            recording,
-            timeline,
-            note,
-            out,
-            clipboard,
-            transcriber,
-        } => {
-            if let Some(engine) = transcriber {
-                transcribe::set_override(engine);
-            }
-            let (movie, timeline) =
-                phone::resolve_import(recording.as_deref(), timeline.as_deref())?;
-            let bundle_dir = out.unwrap_or_else(|| {
-                handoff::default_captures_dir().join(format!("{}.scrawl", make_bundle_id()))
-            });
-            let (dir, _bundle, summary) =
-                phone::import(&movie, timeline.as_deref(), &bundle_dir, note)?;
-            if clipboard {
-                handoff::copy_bundle_to_clipboard(&dir)?;
-            }
-            print!("{summary}");
-            Ok(())
-        }
         Command::Retranscribe { bundle } => {
             let (dir, _) = handoff::load_bundle(&bundle)?;
             if speech_model::transcribe_again(&dir)? {
@@ -1611,12 +1396,8 @@ fn main() -> Result<()> {
             out,
             bench,
             live_speed,
-            transcriber,
             experiments,
         } => {
-            if let Some(engine) = transcriber {
-                transcribe::set_override(engine);
-            }
             for name in &experiments {
                 handoff::enable_experiment(name);
             }
@@ -1651,11 +1432,11 @@ fn main() -> Result<()> {
                         std::fs::create_dir_all(&iter_out)?;
                         let linked = iter_out.join(&video_name);
                         std::fs::hard_link(&video, &linked)
-                            .or_else(|_| std::fs::copy(&video, &linked).map(|_| ()))?;
+                            .or_else(|_| crate::privacy::copy_private(&video, &linked).map(|_| ()))?;
                         let t0 = std::time::Instant::now();
-                        phone::build_movie_bundle(
+                        movie::build_movie_bundle(
                             &iter_out,
-                            phone::MovieCapture {
+                            movie::MovieCapture {
                                 movie: linked,
                                 target: old.target.clone(),
                                 device: device.clone(),
@@ -1714,7 +1495,7 @@ fn main() -> Result<()> {
                         std::fs::create_dir_all(&iter_out)?;
                         let linked = iter_out.join(&video_name);
                         std::fs::hard_link(&video, &linked)
-                            .or_else(|_| std::fs::copy(&video, &linked).map(|_| ()))?;
+                            .or_else(|_| crate::privacy::copy_private(&video, &linked).map(|_| ()))?;
                         let iter_frames = candidates.clone();
                         let iter_strokes = old.strokes.clone();
                         let iter_events = old.events.clone();
@@ -1780,15 +1561,15 @@ fn main() -> Result<()> {
             ensure!(!out.exists(), "{} already exists", out.display());
             std::fs::create_dir_all(&out)?;
             let copied = out.join(video.file_name().context("Bad video name")?);
-            std::fs::copy(&video, &copied)?;
+            crate::privacy::copy_private(&video, &copied)?;
             let timeline_src = dir.join("timeline.json");
             if timeline_src.is_file() {
-                let _ = std::fs::copy(&timeline_src, out.join("timeline.json"));
+                let _ = crate::privacy::copy_private(&timeline_src, out.join("timeline.json"));
             }
             let summary = if let Some(device) = old.device.clone() {
-                phone::build_movie_bundle(
+                movie::build_movie_bundle(
                     &out,
-                    phone::MovieCapture {
+                    movie::MovieCapture {
                         movie: copied,
                         target: old.target,
                         device,
@@ -1811,7 +1592,7 @@ fn main() -> Result<()> {
                     .filter(|p| p.is_file());
                 let recorded = match &audio {
                     Some(path) => {
-                        std::fs::copy(path, out.join("audio.wav"))?;
+                        crate::privacy::copy_private(path, out.join("audio.wav"))?;
                         Some(audio::recorded_audio_from_wav(std::fs::read(path)?)?)
                     }
                     None => None,
@@ -1929,18 +1710,6 @@ fn main() -> Result<()> {
             }
             mic::save_in(&handoff::default_config_path(), &id, &inputs)?;
             mic_list();
-            Ok(())
-        }
-        Command::Hex {
-            command: HexCommand::Status,
-        } => {
-            hex_status();
-            Ok(())
-        }
-        Command::Devices => {
-            for device in helper::devices()? {
-                println!("{}\t{}", device.name, device.id);
-            }
             Ok(())
         }
         Command::SckProbe { watch } => {
@@ -2134,8 +1903,6 @@ fn main() -> Result<()> {
         Command::Autocrop {
             bundle,
             open,
-            serve,
-            port,
         } => {
             let (dir, loaded) = handoff::load_bundle(&bundle)?;
             if loaded.windows.is_empty() {
@@ -2143,9 +1910,6 @@ fn main() -> Result<()> {
                     "No window log in this bundle (record in Screen mode to get one); \
                      the playground falls back to activity only."
                 );
-            }
-            if serve {
-                return autocrop_lab::serve(&dir, &loaded, port, open);
             }
             let page = autocrop_lab::export(&dir, &loaded)?;
             println!("{}", page.display());
@@ -2249,55 +2013,9 @@ fn main() -> Result<()> {
             );
             Ok(())
         }
-        Command::Send {
-            bundle,
-            session,
-            reroute,
-            clipboard,
-        } => {
-            let dir = handoff::resolve_bundle_dir(&bundle)?;
-            if clipboard {
-                handoff::copy_bundle_to_clipboard(&dir)?;
-                println!("Copied {} to clipboard", dir.display());
-            } else {
-                let target_session = handoff::send_to_opencode(&dir, session.as_deref(), reroute)?;
-                println!(
-                    "Sent {} to OpenCode session {target_session}",
-                    dir.display()
-                );
-            }
-            Ok(())
-        }
-        Command::Route {
-            url,
-            browser,
-            explain: Some(bundle),
-        } => {
-            let url = match browser {
-                Some(browser) => Some(
-                    routing::browser_tab_url(&browser)
-                        .with_context(|| format!("Couldn't read the front tab of {browser}"))?,
-                ),
-                None => url,
-            };
-            print!("{}", routing::explain_bundle(&bundle, url.as_deref())?);
-            Ok(())
-        }
-        Command::Route {
-            url,
-            browser,
-            explain: None,
-        } => {
-            let url = match (url, browser) {
-                (Some(url), _) => url,
-                (None, Some(browser)) => routing::browser_tab_url(&browser)
-                    .with_context(|| format!("Couldn't read the front tab of {browser}"))?,
-                (None, None) => anyhow::bail!("Pass --url or --browser"),
-            };
-            match routing::route(&url, &routing::Hooks::default()) {
-                Ok(dest) => println!("{}", serde_json::to_string_pretty(&dest)?),
-                Err(reason) => println!("{url}: clipboard only ({reason})"),
-            }
+        Command::Copy { bundle } => {
+            handoff::copy_bundle_to_clipboard(&bundle)?;
+            println!("Copied capture summary to clipboard");
             Ok(())
         }
         Command::Preview {
@@ -2309,38 +2027,9 @@ fn main() -> Result<()> {
                     .ok()
                     .map(|(dir, loaded, _)| (dir, loaded))
             });
-            ui::run_app(initial, false, false, capture_screenshot);
+            ui::run_app(initial, false, capture_screenshot);
             Ok(())
         }
-        Command::Link {
-            scheme,
-            urls,
-            session,
-            port,
-        } => {
-            let token = handoff::ensure_ingest_token()?;
-            let resolved_urls = if urls.is_empty() {
-                phone::discover_default_ingest_urls(port)
-            } else {
-                urls
-            };
-            ensure!(
-                !resolved_urls.is_empty(),
-                "Could not discover a Tailscale or LAN IP; pass --url http://<host>:{port}"
-            );
-            let link =
-                phone::format_setup_link(&scheme, &resolved_urls, &token, session.as_deref())?;
-            println!("{link}");
-            if let Ok(qr) = helper::qr(&link) {
-                eprintln!("\n{qr}");
-            }
-            Ok(())
-        }
-        Command::Serve {
-            port,
-            usb,
-            no_opencode,
-        } => phone::run_ingest_server(port, usb, no_opencode),
         Command::Skill => {
             print!("{SKILL}");
             Ok(())
@@ -2415,5 +2104,36 @@ mod tests {
         assert_eq!(merged[1].1.t_ms, 2_000);
         assert_eq!(merged[2].1.width, 160);
         assert_eq!(merged[2].1.t_ms, 3_000);
+    }
+}
+
+#[cfg(test)]
+mod local_only_cli_tests {
+    use super::*;
+
+    #[test]
+    fn removed_features_cannot_be_reenabled_from_the_cli() {
+        for args in [
+            vec!["scrawl", "serve"],
+            vec!["scrawl", "link", "--scheme", "test"],
+            vec!["scrawl", "send", "latest"],
+            vec!["scrawl", "route", "--url", "http://localhost:3000"],
+            vec!["scrawl", "hex", "status"],
+            vec!["scrawl", "devices"],
+            vec!["scrawl", "app", "--iphone"],
+            vec!["scrawl", "record", "--iphone"],
+            vec!["scrawl", "autocrop", "latest", "--serve"],
+            vec!["scrawl", "copy", "latest", "--session", "ses_private"],
+            vec!["scrawl", "reprocess", "latest", "--out", "new.scrawl", "--transcriber", "hex"],
+        ] {
+            assert!(Cli::try_parse_from(&args).is_err(), "accepted {args:?}");
+        }
+    }
+
+    #[test]
+    fn manual_capture_and_copy_remain_available() {
+        assert!(Cli::try_parse_from(["scrawl", "record", "--duration", "5"]).is_ok());
+        assert!(Cli::try_parse_from(["scrawl", "copy", "latest"]).is_ok());
+        assert!(Cli::try_parse_from(["scrawl", "export", "latest"]).is_ok());
     }
 }

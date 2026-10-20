@@ -7,7 +7,7 @@ import SwiftUI
 // `scrawl-helper settings [--pane P] [--icon PNG] [--render DIR]`: the Settings window.
 // Scrawl decides everything (`src/settings.rs`) and sends what to show as JSON lines on stdin:
 //   {"type":"state","version":"0.3.2","login":{"on":false,"available":true,"needsApproval":false},
-//    "autoSend":true,"shortcuts":[{"kind":"record","title":"Record","label":"⌥⇧S","key":"S",
+//    "shortcuts":[{"kind":"record","title":"Record","label":"⌥⇧S","key":"S",
 //    "shift":true,"control":false,"option":true,"command":false,"isDefault":true,
 //    "recording":false,"error":null},…],"microphone":{"selected":"default","value":"System default",
 //    "options":[{"id":"default","title":"System default (…)","enabled":true},{"id":"-",…},…],
@@ -17,11 +17,11 @@ import SwiftUI
 //    "updates":true}
 //   {"type":"show","pane":"permissions"}  {"type":"request"|"open-settings","permission":"…"}
 //   {"type":"close"}
-// Clicks and key presses go back on stdout, e.g. {"action":"set","key":"autoSend","value":false},
+// Clicks and key presses go back on stdout, e.g. {"action":"set","key":"videoExport","value":false},
 // {"action":"record-shortcut","kind":"record"}, {"action":"shortcut","kind":"record",
 // "keyCode":15,"modifiers":6144,"key":"r","reserved":false}, {"action":"cancel-shortcut"},
 // {"action":"reset-shortcut","kind":"paste"}, {"action":"grant","permission":"camera"},
-// {"action":"reopen"}, {"action":"show-captures"}, {"action":"check-for-updates"},
+// {"action":"reopen"}, {"action":"show-captures"},
 // {"action":"tour"}, {"action":"install-cli"}, {"action":"uninstall-cli"}, {"action":"close"}.
 
 // MARK: State
@@ -73,10 +73,6 @@ struct SettingsMicrophone: Decodable, Equatable {
 
 struct SettingsTranscriber: Decodable, Equatable {
   var engine = "apple"
-  var hexTitle = "Hex (not running)"
-  var hexEnabled = false
-  var language = "en"
-  var models: [SettingsModelOption] = []
   var speech: SpeechStatus?
 }
 
@@ -116,9 +112,8 @@ struct SettingsCommandLine: Decodable, Equatable {
 }
 
 struct SettingsState: Decodable, Equatable {
-  var version = "0.3.2"
+  var version = "local build"
   var login = SettingsLogin()
-  var autoSend = true
   var shortcuts: [SettingsShortcut] = [
     SettingsShortcut(),
     SettingsShortcut(kind: "paste", title: "Paste last capture", label: "⌥⇧V", key: "V"),
@@ -128,11 +123,10 @@ struct SettingsState: Decodable, Equatable {
   var videoExport = false
   var retention = SettingsRetention()
   var capturesSize: String?
-  var permissions: [SettingsPermission] = ["screen-recording", "microphone", "accessibility", "camera"]
+  var permissions: [SettingsPermission] = ["screen-recording", "microphone", "accessibility"]
     .map { SettingsPermission(permission: $0, required: ["screen-recording", "microphone", "accessibility"].contains($0)) }
-  var updates = true
   var commandLine = SettingsCommandLine()
-  var skillCommand = "bunx skills add kitlangton/scrawl"
+  var skillCommand = "scrawl skill"
 
   var pasteLabel: String { shortcuts.first { $0.kind == "paste" }?.label ?? "⌥⇧V" }
   var recording: String? { shortcuts.first(where: \.recording)?.kind }
@@ -490,7 +484,7 @@ final class MicMeter: NSObject, ObservableObject, AVCaptureAudioDataOutputSample
   private var session: AVCaptureSession?
   private var output: AVCaptureAudioDataOutput?
   private var timer: Timer?
-  private let queue = DispatchQueue(label: "dev.kitlangton.scrawl.helper.meter")
+  private let queue = DispatchQueue(label: "dev.ayunes.scrawl.local.helper.meter")
   private static let floor: Float = -50
   private static let release: Float = 0.035
 
@@ -707,7 +701,7 @@ struct SettingsView: View {
         item(.permissions)
         item(.agents)
       }
-      section("Scrawl")
+      section("Scrawl Local")
       item(.about)
       Spacer()
     }
@@ -788,10 +782,6 @@ struct SettingsView: View {
         SettingsRow(title: "Launch at login", enabled: state.login.available) {
           SettingsSwitch(on: state.login.on, enabled: state.login.available) { model.set("launchAtLogin", $0) }
         }
-        SettingsSeparator()
-        SettingsRow(title: "Send dev-site captures to OpenCode") {
-          SettingsSwitch(on: state.autoSend) { model.set("autoSend", $0) }
-        }
       }
       if state.login.needsApproval {
         SettingsCaption(text: "Allow Scrawl in System Settings › General › Login Items.")
@@ -806,9 +796,6 @@ struct SettingsView: View {
 
   private var recording: some View {
     let t = state.transcriber
-    var engines: [(id: String, title: String, enabled: Bool)] = [("apple", "Apple Speech", true)]
-    engines.append(("hex", t.hexTitle, t.hexEnabled))
-    let chosenModel = t.models.first(where: \.chosen)
     let mic = state.microphone
     return VStack(spacing: 0) {
       SettingsGroup {
@@ -827,30 +814,7 @@ struct SettingsView: View {
           .transition(.opacity)
       }
       Color.clear.frame(height: 20)
-      SettingsGroup {
-        SettingsRow(title: "Transcription") {
-          SettingsPopup(value: t.engine == "hex" ? "Hex" : "Apple Speech", options: engines, selected: t.engine) {
-            model.set("transcriber", $0)
-          }
-        }
-        if t.engine == "hex", !t.models.isEmpty {
-          SettingsSeparator()
-          SettingsRow(title: "Hex model") {
-            SettingsPopup(
-              value: chosenModel?.title ?? "Choose",
-              options: t.models.map { ($0.id, $0.title, true) },
-              selected: chosenModel?.id
-            ) { model.set("hexModel", $0) }
-          }
-        }
-        if t.engine == "hex" {
-          SettingsSeparator()
-          HexLanguageField(model: model, language: t.language)
-        }
-      }
-      SettingsCaption(text: t.hexEnabled || t.engine == "hex"
-        ? "Apple Speech times each word. Hex uses a model you have in Hex, and its word times are estimates."
-        : "Apple Speech runs on this Mac and times each word. Hex shows up here while Hex is running.")
+      SettingsCaption(text: "Apple Speech transcribes on this Mac.")
       if t.engine == "apple", let line = t.speech?.line {
         SettingsCaption(text: line)
       }
@@ -893,12 +857,9 @@ struct SettingsView: View {
 
   private var permissions: some View {
     let required = state.permissions.filter(\.required)
-    let optional = state.permissions.filter { !$0.required }
     return VStack(spacing: 0) {
       SettingsGroup { permissionRows(required) }
       SettingsCaption(text: "Scrawl needs these three to record.")
-      SettingsHeader("When you use them")
-      SettingsGroup { permissionRows(optional) }
     }
   }
 
@@ -952,23 +913,18 @@ struct SettingsView: View {
             Image(nsImage: icon).resizable().interpolation(.high).frame(width: 40, height: 40)
           }
           VStack(alignment: .leading, spacing: 1) {
-            Text("Scrawl").font(.system(size: 14, weight: .semibold)).foregroundStyle(theme.text)
+            Text("Scrawl Local").font(.system(size: 14, weight: .semibold)).foregroundStyle(theme.text)
             Text("Version \(state.version)").font(.system(size: 12).monospacedDigit()).foregroundStyle(theme.secondary)
           }
           Spacer()
-          SettingsButton(title: "Check for Updates…", enabled: state.updates) { model.act("check-for-updates") }
         }
         .padding(.horizontal, 12)
         .frame(height: 64)
       }
-      if !state.updates {
-        SettingsCaption(text: "Updates work in the installed Scrawl.app.")
-      }
+      SettingsCaption(text: "Local-only build. Updates are installed manually from your fork.")
       SettingsHeader("Links")
       SettingsGroup {
-        link("Website", "scrawl.kitlangton.com", "https://scrawl.kitlangton.com")
-        SettingsSeparator()
-        link("Source", "github.com/kitlangton/scrawl", "https://github.com/kitlangton/scrawl")
+        link("Source", "github.com/a-yunes/scrawl", "https://github.com/a-yunes/scrawl")
         SettingsSeparator()
         SettingsRow(title: "Welcome tour") {
           SettingsButton(title: "Show") { model.act("tour") }
@@ -1285,7 +1241,6 @@ final class SettingsWindow: NSObject, NSApplicationDelegate, NSWindowDelegate {
     base.permissions = base.permissions.map { row in
       var row = row
       row.status = ["screen-recording", "microphone", "accessibility"].contains(row.permission) ? "granted" : "not-determined"
-      if row.permission == "camera" { row.status = "denied" }
       return row
     }
     let devices = [
@@ -1301,12 +1256,6 @@ final class SettingsWindow: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var custom = base
     custom.shortcuts[0] = SettingsShortcut(kind: "record", title: "Record", label: "⌃⌥⌘R", key: "R", shift: false, control: true, option: true, command: true, isDefault: false)
     custom.login.on = true
-    var hex = base
-    hex.transcriber = SettingsTranscriber(engine: "hex", hexTitle: "Hex", hexEnabled: true, language: "nl", models: [
-      SettingsModelOption(id: "parakeet-tdt-0.6b-v3", title: "Parakeet TDT v3", chosen: true),
-      SettingsModelOption(id: "whisper-large-v3-turbo", title: "Whisper Large v3 Turbo", chosen: false),
-    ])
-    hex.videoExport = true
     var downloading = base
     downloading.transcriber.speech = SpeechStatus(state: "downloading", locale: "en_US", progress: 0.42)
     var missing = base
@@ -1314,8 +1263,6 @@ final class SettingsWindow: NSObject, NSApplicationDelegate, NSWindowDelegate {
     missing.permissions[0].relaunch = true
     missing.permissions[2].status = "not-determined"
     missing.permissions[2].requested = true
-    var noUpdates = base
-    noUpdates.updates = false
     var cliInstalled = base
     cliInstalled.commandLine = SettingsCommandLine(
       path: "/opt/homebrew/bin/scrawl", button: "uninstall",
@@ -1350,7 +1297,6 @@ final class SettingsWindow: NSObject, NSApplicationDelegate, NSWindowDelegate {
       ("general-recording-shortcut", .general, listening, [.control, .option]),
       ("general-refused", .general, refused, []),
       ("recording", .recording, base, []),
-      ("recording-hex", .recording, hex, []),
       ("recording-mic-chosen", .recording, micChosen, []),
       ("recording-mic-missing", .recording, micMissing, []),
       ("recording-mic-not-allowed", .recording, micNotAllowed, []),
@@ -1365,7 +1311,6 @@ final class SettingsWindow: NSObject, NSApplicationDelegate, NSWindowDelegate {
       ("agents-taken", .agents, cliTaken, []),
       ("agents-dev", .agents, cliDev, []),
       ("about", .about, base, []),
-      ("about-dev", .about, noUpdates, []),
     ]
     var index = 0
     for scheme in [ColorScheme.dark, .light] {
@@ -1388,44 +1333,5 @@ final class SettingsWindow: NSObject, NSApplicationDelegate, NSWindowDelegate {
         try? rep.representation(using: .png, properties: [:])?.write(to: url)
       }
     }
-  }
-}
-
-/// Commit on Return or Apply, so intermediate edits never reach the transcriber.
-private struct HexLanguageField: View {
-  @ObservedObject var model: SettingsModel
-  let language: String
-  @State private var draft: String
-
-  init(model: SettingsModel, language: String) {
-    self.model = model
-    self.language = language
-    _draft = State(initialValue: language)
-  }
-
-  private var normalized: String { draft.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-  private var valid: Bool {
-    normalized.isEmpty || normalized.range(of: "^[a-z][a-z0-9-]{0,34}$", options: .regularExpression) != nil
-  }
-  private func apply() {
-    if valid { model.set("hexLanguage", normalized) }
-  }
-  var body: some View {
-    SettingsRow(title: "Hex language") {
-      // ImageRenderer cannot draw AppKit-backed text fields; keep previews readable.
-      if model.rendering {
-        Text(language).frame(width: 120, alignment: .leading)
-      } else {
-        TextField("en", text: $draft)
-          .textFieldStyle(.roundedBorder)
-          .frame(width: 120)
-          .onSubmit { apply() }
-          .accessibilityLabel("Hex language code")
-      }
-      Button("Apply") { apply() }
-        .disabled(!valid || (normalized.isEmpty ? "en" : normalized) == language)
-    }
-    .help("Language code, e.g. en, nl or auto. Support depends on the Hex model; some ignore it. This does not follow Hex’s dictation language.")
-    .onChange(of: language) { _, value in draft = value }
   }
 }

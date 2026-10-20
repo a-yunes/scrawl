@@ -1,7 +1,7 @@
 //! First-run onboarding: a welcome, one screen on how Scrawl works, one screen with every
 //! permission it needs, and a first capture. The window is SwiftUI in `scrawl-helper onboarding`;
 //! this module decides what it shows (`Flow`) and remembers progress in
-//! `~/.config/scrawl/config.json` (`"onboarding"`, see `Progress`).
+//! `~/.config/scrawl-local/config.json` (`"onboarding"`, see `Progress`).
 //!
 //! Screen Recording, Microphone and Accessibility are required and asked for together on the
 //! permissions screen, Screen Recording first. Camera (the cabled iPhone) is asked for the first
@@ -650,7 +650,7 @@ impl Gate {
     }
 }
 
-/// Onboarding progress, under `"onboarding"` in `~/.config/scrawl/config.json`.
+/// Onboarding progress, under `"onboarding"` in `~/.config/scrawl-local/config.json`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Progress {
@@ -787,7 +787,6 @@ enum Transport {
         child: std::process::Child,
         stdin: Option<std::process::ChildStdin>,
     },
-    InProcess(Option<flume::Sender<serde_json::Value>>),
 }
 
 /// The open welcome window: the `Flow`, the window drawing it, and a poller re-reading the
@@ -810,18 +809,7 @@ impl Session {
     ) -> anyhow::Result<Self> {
         use std::sync::atomic::{AtomicBool, Ordering};
 
-        let transport = if cfg!(target_os = "windows") {
-            let (sender, receiver) = flume::unbounded();
-            let window_events = events.clone();
-            crate::onboarding_window::request_open(
-                receiver,
-                shortcut.to_owned(),
-                std::sync::Arc::new(move |event| window_events(event)),
-            );
-            Transport::InProcess(Some(sender))
-        } else {
-            Self::spawn_helper(shortcut, events.clone())?
-        };
+        let transport = Self::spawn_helper(shortcut, events.clone())?;
 
         let polling = std::sync::Arc::new(AtomicBool::new(true));
         let alive = std::sync::Arc::clone(&polling);
@@ -1027,14 +1015,6 @@ impl Session {
                     *stdin = None;
                 }
             }
-            Transport::InProcess(sender) => {
-                if sender
-                    .as_ref()
-                    .is_some_and(|s| s.send(message.clone()).is_err())
-                {
-                    *sender = None;
-                }
-            }
         }
     }
 }
@@ -1049,7 +1029,6 @@ impl Drop for Session {
                 *stdin = None;
                 let _ = child.wait();
             }
-            Transport::InProcess(sender) => *sender = None,
         }
     }
 }

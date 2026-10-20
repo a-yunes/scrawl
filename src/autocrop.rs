@@ -219,7 +219,7 @@ impl Default for Settings {
 }
 
 impl Settings {
-    /// From `~/.config/scrawl/config.json` `"autocrop"`: absent or `true` is the defaults,
+    /// From `~/.config/scrawl-local/config.json` `"autocrop"`: absent or `true` is the defaults,
     /// `false` is off, an object overrides some settings.
     pub fn from_config(value: Option<&serde_json::Value>) -> Option<Self> {
         match value {

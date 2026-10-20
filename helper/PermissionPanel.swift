@@ -96,9 +96,9 @@ enum PermissionPanel {
       if url.pathExtension.lowercased() == "app" { return url }
       url = url.deletingLastPathComponent()
     }
-    let installed = URL(filePath: NSHomeDirectory()).appending(path: "Applications/Scrawl.app")
+    let installed = URL(filePath: NSHomeDirectory()).appending(path: "Applications/Scrawl Local.app")
     if FileManager.default.fileExists(atPath: installed.path) { return installed }
-    return URL(filePath: "/Applications/Scrawl.app")
+    return URL(filePath: "/Applications/Scrawl Local.app")
   }
 
   /// For the onboarding window: launch the panel from a button's frame (AppKit screen

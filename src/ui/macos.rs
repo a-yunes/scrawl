@@ -206,13 +206,7 @@ pub(super) fn hand_back_keys(cx: &mut App) {
     }
 }
 
-pub(super) fn start_updates() {
-    crate::sparkle::start();
-}
 
-pub(super) fn check_for_updates() {
-    crate::sparkle::check_for_updates();
-}
 
 pub(super) fn open_overlay(
     telemetry: Arc<SharedCaptureTelemetry>,
@@ -428,10 +422,6 @@ objc2::define_class!(
             let _ = self.ivars().sender.try_send(MenuAction::Settings);
         }
 
-        #[unsafe(method(checkForUpdates:))]
-        fn check_for_updates(&self, _sender: &AnyObject) {
-            let _ = self.ivars().sender.try_send(MenuAction::CheckForUpdates);
-        }
 
         #[unsafe(method(quitApp:))]
         fn quit_app(&self, _sender: &AnyObject) {
@@ -634,7 +624,6 @@ pub(super) fn install_status_bar() -> Option<flume::Receiver<MenuAction>> {
     if let Some(item) = menu.itemAtIndex(menu.numberOfItems() - 1) {
         item.setKeyEquivalent(&NSString::from_str(","));
     }
-    add("Check for Updates…", sel!(checkForUpdates:));
     add("Quit Scrawl", sel!(quitApp:));
     if let Some(item) = menu.itemAtIndex(menu.numberOfItems() - 1) {
         item.setKeyEquivalent(&NSString::from_str("q"));

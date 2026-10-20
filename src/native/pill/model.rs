@@ -321,28 +321,26 @@ pub enum ElemId {
     ChipArea = 2,
     ChipWindow = 3,
     ChipScreen = 4,
-    ChipIphone = 5,
-    Record = 6,
-    DividerClose = 7,
-    Close = 8,
-    Undo = 9,
-    Cancel = 10,
-    Finish = 11,
-    Processing = 12,
-    DoneLead = 13,
-    Paste = 14,
-    Inspect = 15,
+    Record = 5,
+    DividerClose = 6,
+    Close = 7,
+    Undo = 8,
+    Cancel = 9,
+    Finish = 10,
+    Processing = 11,
+    DoneLead = 12,
+    Paste = 13,
+    Inspect = 14,
 }
 
 impl ElemId {
-    pub const COUNT: usize = 16;
+    pub const COUNT: usize = 15;
     pub const ALL: [ElemId; Self::COUNT] = [
         Self::Lead,
         Self::DividerLead,
         Self::ChipArea,
         Self::ChipWindow,
         Self::ChipScreen,
-        Self::ChipIphone,
         Self::Record,
         Self::DividerClose,
         Self::Close,
@@ -362,7 +360,6 @@ impl ElemId {
             Self::ChipArea => "chip:Area",
             Self::ChipWindow => "chip:Window",
             Self::ChipScreen => "chip:Screen",
-            Self::ChipIphone => "chip:iPhone",
             Self::Record => "record",
             Self::DividerClose => "divider.close",
             Self::Close => "close",
@@ -381,7 +378,6 @@ impl ElemId {
             SelectionMode::Area => Self::ChipArea,
             SelectionMode::Window => Self::ChipWindow,
             SelectionMode::Screen => Self::ChipScreen,
-            SelectionMode::Iphone => Self::ChipIphone,
         }
     }
 
@@ -390,7 +386,6 @@ impl ElemId {
             Self::ChipArea => Some(SelectionMode::Area),
             Self::ChipWindow => Some(SelectionMode::Window),
             Self::ChipScreen => Some(SelectionMode::Screen),
-            Self::ChipIphone => Some(SelectionMode::Iphone),
             _ => None,
         }
     }
@@ -409,7 +404,6 @@ impl ElemId {
             Self::ChipArea => "Area",
             Self::ChipWindow => "Window",
             Self::ChipScreen => "Screen",
-            Self::ChipIphone => "iPhone",
             Self::Record => "Record",
             Self::Close | Self::Cancel => "Cancel",
             Self::Undo => "Undo",
@@ -526,7 +520,6 @@ impl Metrics {
             SelectionMode::Area => self.area,
             SelectionMode::Window => self.window,
             SelectionMode::Screen => self.screen,
-            SelectionMode::Iphone => self.iphone,
         }
     }
 

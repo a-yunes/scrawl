@@ -130,17 +130,10 @@ pub enum LiveOverlayEvent {
     CancelCapture,
     RequestSnapshot,
     /// The iPhone mirror ended on its own (unplugged, never found, or access denied).
-    PhoneEnded,
     /// The welcome window: a button, fresh permission states, or the helper exiting.
     Onboarding(crate::onboarding::Event),
     /// The Settings window: an action, fresh permission states, or the helper exiting.
     Settings(crate::settings::Event),
-    /// A ScrawlKit recording was ingested from an iPhone and compiled into a `.scrawl` bundle.
-    IngestedBundle {
-        dir: PathBuf,
-        bundle: Box<crate::model::ScrawlBundle>,
-        status: Option<String>,
-    },
 }
 
 // Carbon HIToolbox modifier bits. The shortcut is stored with them on every platform.
@@ -316,12 +309,15 @@ pub fn shortcut_keys(label: &str) -> Vec<String> {
 }
 
 pub fn scrawl_log(msg: impl AsRef<str>) {
+    if !crate::privacy::diagnostics_enabled() {
+        return;
+    }
     use std::io::Write;
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
-    let line = format!("[{ts}] {}\n", msg.as_ref());
+    let line = format!("[{ts}] {}\n", crate::privacy::redact_urls(msg.as_ref()));
     eprint!("{line}");
     let Some(dir) = log_dir() else {
         return;
@@ -1211,12 +1207,6 @@ impl SharedCaptureTelemetry {
         if self.agent_context.swap(false, Ordering::AcqRel) {
             let hits = crate::ax::Prober::shared().finish();
             crate::ax::apply(&hits, &mut events, &mut strokes);
-            if self.capture_mode.load(Ordering::Acquire) != 3 {
-                let end = crate::now_epoch_ms();
-                let start = end.saturating_sub(self.elapsed_ms());
-                let page = crate::page::between(start, end);
-                crate::page::apply(&page, start, &mut events, &mut strokes);
-            }
         }
         (events, strokes)
     }

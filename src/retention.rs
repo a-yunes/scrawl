@@ -3,7 +3,7 @@
 //! A bundle's prompt (`summary.md`, `scrawl.json`, `contact-sheet.png`, `frames/`) is small; its
 //! video, audio and full-size frames are nearly all of its size. After `mediaDays` the heavy
 //! media goes to the Trash and the prompt stays; after `bundleDays` the whole bundle goes. Both
-//! live under `"retention"` in `~/.config/scrawl/config.json` (`null` keeps forever). A bundle
+//! live under `"retention"` in `~/.config/scrawl-local/config.json` (`null` keeps forever). A bundle
 //! younger than a day or changed within the last day, one whose media is still copying
 //! (`.media-pending`, `.media-sending`), one Scrawl is working on, a pinned one (`.pinned`), and
 //! one still waiting to reach OpenCode (`.deliver.json`) are never touched.
@@ -35,7 +35,7 @@ const DAY_MS: u64 = 24 * 60 * 60 * 1000;
 /// A sync marker older than this belongs to a copy that died.
 const STALE_MARKER: Duration = Duration::from_secs(24 * 60 * 60);
 /// Long edge iPhone video is re-encoded to: the size its keyframes are decoded at.
-const SHRINK_EDGE: u32 = crate::phone::PHONE_FRAME_EDGE;
+const SHRINK_EDGE: u32 = crate::movie::PHONE_FRAME_EDGE;
 /// Videos above this rate are worth re-encoding (native iPhone mirror video is ~18 Mbps; a
 /// shrunk one ~2).
 const SHRINK_ABOVE_BPS: u64 = 6_000_000;
@@ -274,7 +274,7 @@ pub fn plan(captures: &Path, policy: &Policy, now: SystemTime) -> Vec<Action> {
     let mut actions = Vec::new();
     for dir in bundles {
         if dir.join(PINNED).exists()
-            || dir.join(crate::delivery::PENDING).exists()
+            || dir.join(".deliver.json").exists()
             || is_claimed(&dir)
             || live_marker(&dir, crate::handoff::MEDIA_PENDING, now)
             || live_marker(&dir, MEDIA_SENDING, now)
@@ -471,7 +471,7 @@ pub fn apply(actions: &[Action], policy: &Policy, trasher: Trasher, shrink: bool
         if live_marker(bundle, crate::handoff::MEDIA_PENDING, now)
             || live_marker(bundle, MEDIA_SENDING, now)
             || bundle.join(PINNED).exists()
-            || bundle.join(crate::delivery::PENDING).exists()
+            || bundle.join(".deliver.json").exists()
         {
             continue;
         }
@@ -950,7 +950,7 @@ mod tests {
         let undelivered = bundle(&tmp.0, "scrawl-undelivered", 40.0, false);
         marker(
             &undelivered,
-            crate::delivery::PENDING,
+            ".deliver.json",
             later() - Duration::from_secs(40 * 24 * 3600),
         );
         let busy = bundle(&tmp.0, "scrawl-busy", 40.0, false);

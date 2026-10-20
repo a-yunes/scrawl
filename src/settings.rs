@@ -1,6 +1,6 @@
 //! The Settings window. It is SwiftUI in `scrawl-helper settings` and, like onboarding, only
 //! draws what this module sends it (`View`) and reports what was clicked or typed (`Action`).
-//! Everything is decided and written here: `~/.config/scrawl/config.json` keeps its other keys
+//! Everything is decided and written here: `~/.config/scrawl-local/config.json` keeps its other keys
 //! and its `0600` mode (it holds the ingest token).
 //!
 //! Panes: General (launch at login, sending dev-site captures, the two shortcuts), Recording
@@ -64,7 +64,7 @@ impl Shortcuts {
         }
     }
 
-    /// From `~/.config/scrawl/config.json`, moving a shortcut saved by 0.3.x (its own file
+    /// From `~/.config/scrawl-local/config.json`, moving a shortcut saved by 0.3.x (its own file
     /// under Application Support) across the first time.
     pub fn load() -> Self {
         let path = crate::handoff::default_config_path();
@@ -583,14 +583,13 @@ pub enum Pane {
 }
 
 /// What `bunx skills add` installs: `skills/scrawl/SKILL.md` from this repository.
-pub const SKILL_COMMAND: &str = "bunx skills add kitlangton/scrawl";
+pub const SKILL_COMMAND: &str = "scrawl skill";
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct View {
     pub version: String,
     pub login: LoginView,
-    pub auto_send: bool,
     pub shortcuts: Vec<ShortcutView>,
     pub microphone: MicrophoneView,
     pub transcriber: TranscriberView,
@@ -599,7 +598,6 @@ pub struct View {
     /// How much the captures folder takes, once measured.
     pub captures_size: Option<String>,
     pub permissions: Vec<PermissionView>,
-    pub updates: bool,
     pub command_line: CommandLineView,
     pub skill_command: &'static str,
 }
@@ -792,20 +790,10 @@ fn microphone_view(
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranscriberView {
-    /// What recordings use now: "apple" or "hex".
+    /// On-device Apple Speech is the only transcription engine.
     pub engine: &'static str,
-    pub hex_title: &'static str,
-    pub hex_enabled: bool,
-    pub language: String,
-    pub models: Vec<ModelView>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ModelView {
-    pub id: String,
-    pub title: String,
-    pub chosen: bool,
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct RetentionView {
@@ -922,7 +910,6 @@ pub enum Action {
     /// Reopen Scrawl so a Screen Recording grant takes.
     Reopen,
     ShowCaptures,
-    CheckForUpdates,
     /// "Show Welcome Tour" on About.
     Tour,
     /// Link `scrawl` into a folder on PATH, or remove that link.
@@ -941,7 +928,6 @@ pub enum Effect {
     OpenSettings(Permission),
     OpenLoginItems,
     ShowCaptures,
-    CheckForUpdates,
     /// The captures folder may have changed size.
     Measure,
     Relaunch,
@@ -1038,7 +1024,6 @@ impl Panel {
                 }
             }
             Action::ShowCaptures => Effect::ShowCaptures,
-            Action::CheckForUpdates => Effect::CheckForUpdates,
             Action::Tour => Effect::Tour,
             Action::InstallCli => {
                 let result = crate::command_line::install(&host.command_line());
@@ -1109,26 +1094,11 @@ impl Panel {
                     return Effect::OpenLoginItems;
                 }
             }
-            ("autoSend" | "videoExport", serde_json::Value::Bool(on)) => write(key, (*on).into()),
+            ("videoExport", serde_json::Value::Bool(on)) => write(key, (*on).into()),
             ("microphone", serde_json::Value::String(id)) => {
                 let inputs = self.inputs.clone().unwrap_or_default();
                 if let Err(error) = crate::mic::save_in(&path, id, &inputs) {
                     crate::capture::scrawl_log(format!("Saving microphone failed: {error:#}"));
-                }
-            }
-            ("transcriber", serde_json::Value::String(name)) => {
-                if let Some(engine) = crate::transcribe::Engine::parse(name) {
-                    write("transcriber", engine.name().into());
-                }
-            }
-            ("hexModel", serde_json::Value::String(model)) if !model.trim().is_empty() => {
-                // Picking a Hex model is choosing Hex.
-                write("hexModel", model.trim().into());
-                write("transcriber", "hex".into());
-            }
-            ("hexLanguage", serde_json::Value::String(language)) => {
-                if let Some(language) = crate::hex::language_code(language) {
-                    write("hexLanguage", language.into());
                 }
             }
             ("retention", serde_json::Value::String(id)) => {
@@ -1162,6 +1132,9 @@ impl Panel {
     /// Like onboarding: the first press asks macOS, later ones (or a denied one) open the
     /// System Settings pane.
     fn grant(&mut self, permission: Permission) -> Effect {
+        if !permission.required() {
+            return Effect::None;
+        }
         let status = self.status(permission);
         if status == Status::Granted {
             return Effect::None;
@@ -1176,13 +1149,6 @@ impl Panel {
     pub fn view(&self, host: &dyn Host) -> View {
         let config = crate::handoff::load_config_from(&host.config_path());
         let shortcuts = host.shortcuts();
-        let hex = crate::hex::cached_status();
-        let engine = config
-            .transcriber
-            .as_deref()
-            .and_then(crate::transcribe::Engine::parse)
-            .unwrap_or_default();
-        let menu = crate::transcribe::menu_state(engine, hex.as_ref(), config.hex_model.as_deref());
         let policy = crate::retention::Policy::load_from(&host.config_path());
         let login = login_item();
         // Windows asks for no screen or accessibility grant, and has no cabled iPhone.
@@ -1193,7 +1159,6 @@ impl Panel {
                 Permission::ScreenRecording,
                 Permission::Microphone,
                 Permission::Accessibility,
-                Permission::Camera,
             ]
         };
         View {
@@ -1203,7 +1168,6 @@ impl Panel {
                 available: login != LoginItem::Unavailable,
                 needs_approval: login == LoginItem::NeedsApproval,
             },
-            auto_send: config.auto_send.unwrap_or(true),
             shortcuts: ShortcutKind::ALL
                 .into_iter()
                 .map(|kind| {
@@ -1225,17 +1189,7 @@ impl Panel {
                 self.inputs.as_ref(),
                 self.status(Permission::Microphone) == Status::Granted,
             ),
-            transcriber: TranscriberView {
-                engine: if menu.hex_checked { "hex" } else { "apple" },
-                hex_title: menu.hex_title,
-                hex_enabled: menu.hex_enabled,
-                language: crate::handoff::hex_language_from(&config),
-                models: menu
-                    .models
-                    .into_iter()
-                    .map(|(id, title, chosen)| ModelView { id, title, chosen })
-                    .collect(),
-            },
+            transcriber: TranscriberView { engine: "apple" },
             video_export: config.video_export.unwrap_or(false),
             retention: RetentionView {
                 preset: policy.preset().map(preset_id),
@@ -1259,7 +1213,6 @@ impl Panel {
                     relaunch: permission == Permission::ScreenRecording && self.screen_relaunch(),
                 })
                 .collect(),
-            updates: updates_available(),
             command_line: CommandLineView::new(
                 &crate::command_line::state(&host.command_line()),
                 self.cli_error.as_deref(),
@@ -1268,25 +1221,6 @@ impl Panel {
         }
     }
 }
-
-/// Whether this copy can check for updates: Sparkle in Scrawl.app; on Windows the releases
-/// page always opens.
-fn updates_available() -> bool {
-    #[cfg(target_os = "macos")]
-    return crate::sparkle::available();
-    #[cfg(not(target_os = "macos"))]
-    true
-}
-
-fn check_for_updates() {
-    #[cfg(target_os = "macos")]
-    crate::sparkle::check_for_updates();
-    #[cfg(not(target_os = "macos"))]
-    let _ = crate::handoff::open_path(Path::new(RELEASES_URL));
-}
-
-#[cfg(not(target_os = "macos"))]
-const RELEASES_URL: &str = "https://github.com/kitlangton/scrawl/releases/latest";
 
 // MARK: The live window
 
@@ -1347,7 +1281,6 @@ enum Transport {
         child: std::process::Child,
         stdin: Option<std::process::ChildStdin>,
     },
-    InProcess(Option<flume::Sender<serde_json::Value>>),
 }
 
 /// The open Settings window.
@@ -1369,13 +1302,7 @@ impl Session {
         use std::sync::atomic::{AtomicBool, Ordering};
 
         let events: std::sync::Arc<dyn Fn(Event) + Send + Sync> = std::sync::Arc::new(events);
-        let transport = if cfg!(target_os = "windows") {
-            let (sender, receiver) = flume::unbounded();
-            crate::settings_window::request_open(receiver, pane, std::sync::Arc::clone(&events));
-            Transport::InProcess(Some(sender))
-        } else {
-            Self::spawn_helper(pane, std::sync::Arc::clone(&events))?
-        };
+        let transport = Self::spawn_helper(pane, std::sync::Arc::clone(&events))?;
 
         let polling = std::sync::Arc::new(AtomicBool::new(true));
         let alive = std::sync::Arc::clone(&polling);
@@ -1386,7 +1313,6 @@ impl Session {
                 // Hex and the size on open (`hex::watch` keeps Hex fresh) and every 30 s; the
                 // grants and the login item every second.
                 if n % 30 == 0 {
-                    crate::hex::refresh_in_background();
                     let size =
                         crate::retention::captures_size(&crate::handoff::default_captures_dir());
                     poll(Event::CapturesSize(size));
@@ -1515,10 +1441,6 @@ impl Session {
                 let _ = crate::handoff::open_path(&dir);
                 Effect::None
             }
-            Effect::CheckForUpdates => {
-                check_for_updates();
-                Effect::None
-            }
             Effect::Measure => {
                 crate::retention::nudge();
                 let events = std::sync::Arc::clone(&self.events);
@@ -1569,13 +1491,6 @@ impl Session {
                     *stdin = None;
                 }
             }
-            Transport::InProcess(sender) => {
-                if let Some(channel) = sender.as_ref()
-                    && channel.send(message.clone()).is_err()
-                {
-                    *sender = None;
-                }
-            }
         }
     }
 }
@@ -1590,7 +1505,6 @@ impl Drop for Session {
                 *stdin = None;
                 let _ = child.wait();
             }
-            Transport::InProcess(sender) => *sender = None,
         }
     }
 }
@@ -2053,17 +1967,13 @@ mod tests {
                 host,
             )
         };
-        assert!(panel.view(&host).auto_send);
-        set(&mut panel, &mut host, "autoSend", false.into());
         set(&mut panel, &mut host, "videoExport", true.into());
-        set(&mut panel, &mut host, "transcriber", "hex".into());
         assert_eq!(
             set(&mut panel, &mut host, "retention", "month".into()),
             Effect::Measure
         );
-        set(&mut panel, &mut host, "transcriber", "nonsense".into());
         let view = panel.view(&host);
-        assert!(!view.auto_send && view.video_export);
+        assert!(view.video_export);
         assert_eq!(view.retention.preset, Some("month"));
         assert_eq!(
             view.retention.note,
@@ -2073,24 +1983,7 @@ mod tests {
             )
         );
         let config = read_json(&host.path);
-        assert_eq!(config["transcriber"], "hex");
         assert_eq!(config["ingestToken"], "secret");
-        set(&mut panel, &mut host, "hexModel", "parakeet".into());
-        assert_eq!(read_json(&host.path)["hexModel"], "parakeet");
-        assert_eq!(panel.view(&host).transcriber.language, "en");
-        set(&mut panel, &mut host, "hexLanguage", " NL ".into());
-        assert_eq!(panel.view(&host).transcriber.language, "nl");
-        set(
-            &mut panel,
-            &mut host,
-            "hexLanguage",
-            "nl&language=en".into(),
-        );
-        assert_eq!(read_json(&host.path)["hexLanguage"], "nl");
-        set(&mut panel, &mut host, "hexLanguage", "auto".into());
-        assert_eq!(panel.view(&host).transcriber.language, "auto");
-        set(&mut panel, &mut host, "hexLanguage", "".into());
-        assert_eq!(panel.view(&host).transcriber.language, "en");
         set(&mut panel, &mut host, "retention", "forever".into());
         // "Forever" says it all; no caption.
         assert_eq!(panel.view(&host).retention.note, "");
@@ -2221,7 +2114,7 @@ mod tests {
         );
         assert_eq!(
             grant(&mut panel, &mut host, Permission::Camera),
-            Effect::OpenSettings(Permission::Camera)
+            Effect::None
         );
         let view = panel.view(&host);
         if WIN {
@@ -2236,12 +2129,10 @@ mod tests {
                     Permission::ScreenRecording,
                     Permission::Microphone,
                     Permission::Accessibility,
-                    Permission::Camera
                 ],
-                "no Input Monitoring"
+                "no Camera or Input Monitoring"
             );
             assert!(view.permissions[..3].iter().all(|p| p.required));
-            assert!(!view.permissions[3].required);
         }
         // Screen Recording granted but not yet usable: Reopen relaunches.
         assert_eq!(panel.on(Action::Reopen, &mut host), Effect::None);
@@ -2285,10 +2176,6 @@ mod tests {
                 permission: Permission::Camera
             }
         );
-        assert_eq!(
-            parse(r#"{"action":"check-for-updates"}"#),
-            Action::CheckForUpdates
-        );
         assert_eq!(parse(r#"{"action":"install-cli"}"#), Action::InstallCli);
         assert_eq!(parse(r#"{"action":"uninstall-cli"}"#), Action::UninstallCli);
     }
@@ -2309,7 +2196,7 @@ mod tests {
         );
         assert_eq!(
             panel.view(&host).skill_command,
-            "bunx skills add kitlangton/scrawl"
+            "scrawl skill"
         );
 
         let macos = dir.0.join("Scrawl.app/Contents/MacOS");

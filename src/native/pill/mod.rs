@@ -793,13 +793,6 @@ impl PillRuntimeState {
                     PillAction::SwitchRecording(SelectionMode::Screen)
                 }
             }
-            ElemId::ChipIphone => {
-                if is_selecting {
-                    PillAction::SelectMode(SelectionMode::Iphone)
-                } else {
-                    PillAction::SwitchRecording(SelectionMode::Iphone)
-                }
-            }
             ElemId::Record => PillAction::RecordSelected,
             ElemId::Undo => PillAction::Undo,
             ElemId::Cancel => PillAction::Cancel,
@@ -1147,12 +1140,11 @@ impl PillRuntimeState {
         let is_glass = self.style == PillStyle::Glass && self.glass_view.is_some();
 
         match elem.id {
-            ElemId::ChipArea | ElemId::ChipWindow | ElemId::ChipScreen | ElemId::ChipIphone => {
+            ElemId::ChipArea | ElemId::ChipWindow | ElemId::ChipScreen => {
                 let mode = match elem.id {
                     ElemId::ChipArea => SelectionMode::Area,
                     ElemId::ChipWindow => SelectionMode::Window,
                     ElemId::ChipScreen => SelectionMode::Screen,
-                    ElemId::ChipIphone => SelectionMode::Iphone,
                     _ => unreachable!(),
                 };
                 if is_glass {

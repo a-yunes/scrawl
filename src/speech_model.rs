@@ -86,9 +86,6 @@ fn update(change: impl FnOnce(&mut Status)) {
 /// Checks the model in the background and installs it if it's missing, unless the transcriber
 /// is Hex (whose users don't need it) or a check is already running. Cheap to call again.
 pub fn ensure() {
-    if crate::transcribe::Engine::configured() == crate::transcribe::Engine::Hex {
-        return;
-    }
     if matches!(current().state, State::Ready | State::Unavailable)
         || RUNNING.swap(true, Ordering::AcqRel)
     {

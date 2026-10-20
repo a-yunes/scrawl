@@ -56,7 +56,6 @@ impl IconKind {
             SelectionMode::Area => Self::Area,
             SelectionMode::Window => Self::Window,
             SelectionMode::Screen => Self::Screen,
-            SelectionMode::Iphone => Self::Iphone,
         }
     }
 }
