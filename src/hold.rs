@@ -215,8 +215,8 @@ impl Reveal {
 fn next(mode: SelectionMode) -> SelectionMode {
     match mode {
         SelectionMode::Screen => SelectionMode::Window,
-        SelectionMode::Window => SelectionMode::Iphone,
-        SelectionMode::Iphone | SelectionMode::Area => SelectionMode::Screen,
+        SelectionMode::Window if cfg!(target_os = "macos") => SelectionMode::Iphone,
+        SelectionMode::Window | SelectionMode::Iphone | SelectionMode::Area => SelectionMode::Screen,
     }
 }
 
@@ -245,6 +245,7 @@ mod tests {
         assert_eq!(s.tick(240, true), Action::None);
         assert_eq!(s.tick(250, true), Action::Open(Screen));
         assert_eq!(s.press(600, FREE), Action::Show(Window));
+        #[cfg(target_os = "macos")]
         assert_eq!(s.press(800, FREE), Action::Show(Iphone));
         assert_eq!(s.press(1_000, FREE), Action::Show(Screen));
         assert_eq!(s.press(1_200, FREE), Action::Show(Window));

@@ -2930,20 +2930,28 @@ impl ScrawlCoordinator {
 
             let _ = entity.update(cx, |coord, cx| {
                 let (finalized, duration_ms, judged) = result;
-                let mut frame_count = 1;
                 coord.completed_dir = None;
-                if let Ok((dir, bundle, _)) = finalized {
-                    frame_count = bundle.keyframes.len();
-                    let _ = crate::handoff::copy_bundle_to_clipboard(&dir);
-                    coord.completed_dir = Some(dir.clone());
-                    coord.last_local_capture_ms = crate::now_epoch_ms();
-                    if let Some(dest) = bundle.destination.clone() {
-                        coord.send_completed(dir.clone(), dest, cx);
+                let (dir, bundle, _) = match finalized {
+                    Ok(capture) => capture,
+                    Err(error) => {
+                        scrawl_log(format!("Capture failed: {error:#}"));
+                        #[cfg(target_os = "linux")]
+                        crate::linux::shell::notify("Capture failed", &error.to_string());
+                        coord.set_island_phase(IslandPhase::Dismissing);
+                        cx.notify();
+                        return;
                     }
-                    coord.set_review_bundle((dir.clone(), bundle), coord.completed_note.clone());
-                    if let Some((judgement, url)) = judged {
-                        coord.act_on_route(dir, judgement, url, cx);
-                    }
+                };
+                let frame_count = bundle.keyframes.len();
+                let _ = crate::handoff::copy_bundle_to_clipboard(&dir);
+                coord.completed_dir = Some(dir.clone());
+                coord.last_local_capture_ms = crate::now_epoch_ms();
+                if let Some(dest) = bundle.destination.clone() {
+                    coord.send_completed(dir.clone(), dest, cx);
+                }
+                coord.set_review_bundle((dir.clone(), bundle), coord.completed_note.clone());
+                if let Some((judgement, url)) = judged {
+                    coord.act_on_route(dir, judgement, url, cx);
                 }
                 coord.set_island_phase(IslandPhase::Completed {
                     finished_at: Instant::now(),
