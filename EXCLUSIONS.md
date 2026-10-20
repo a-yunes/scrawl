@@ -83,6 +83,7 @@ them as disabled-by-default controls or dormant configuration switches.
 | --- | --- | --- |
 | 2026-10-20 | `5a55a8649a2f053bac5a44145d81e1e079ea3228` | Initial local-only fork, `0.3.7-local.1`; hardening commit `5d7c003`. |
 | 2026-10-20 | `c69dffc645fe75e2220e637916ec172805397dab` (release 0.3.8) | Merge release history and bump to `0.3.8-local.1`. Keep appcast deleted. No upstream application implementation or dependency-version changes in this interval. |
+| 2026-10-20 | `b93e1db6bbe373d8ea02c4bf44678100bbc30db5` | Follow-up merge of the recording pill Esc-hint removal that landed during validation; version `0.3.8-local.2`. Fork exclusions unchanged. |
 
 See [HARDENING.md](HARDENING.md) for the audit, backport rationale and historical
 verification. The source guard is a regression aid. This policy is authoritative
@@ -99,3 +100,14 @@ when an upstream change uses a different name or architecture.
   the hardened fork, so this sync did not repeat the earlier advisory lookup.
 - No installation, live desktop/microphone recording or clipboard paste was done.
   The local build remains ad-hoc signed, not Apple-notarized; CI remains inactive.
+
+### Validation of the b93e1db follow-up
+
+- All 257 application tests passed again, with the same benchmark ignored.
+- The changed Metal shader compiled; its uniform field order matches Rust and
+  no Esc-hint fields remain. Live pill hover behavior was not exercised.
+- Exclusion checks remained green. Dependency versions and the Grid patch did
+  not change, so the preceding Grid and policy-regression results still apply.
+- The `0.3.8-local.2` package passed generated-bundle/file-permission checks,
+  removed-command rejection, synthetic video export/frame decoding and strict
+  signature verification. No real recording, clipboard paste or installation.
