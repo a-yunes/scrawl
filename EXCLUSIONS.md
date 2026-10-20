@@ -38,6 +38,7 @@ them as disabled-by-default controls or dormant configuration switches.
 | Identity | `Scrawl Local`, bundle ID `dev.ayunes.scrawl.local`, helper ID `dev.ayunes.scrawl.local.helper`. Never adopt upstream's identity during a version bump. |
 | Data separation | Captures: `~/Library/Application Support/scrawl-local/captures/`. Config: `~/.config/scrawl-local/`. Optional logs: `~/Library/Logs/Scrawl Local/`. No automatic migration of upstream config or delivery queues. |
 | File privacy | Preserve umask 077 in app/helper, owner-only capture files/directories, and `privacy::copy_private` protections for copied media. |
+| Welcome motion | Keep the glow static and animate only the cached icon with a Core Animation transform. Preserve reduced-motion, occlusion, hiding and teardown behavior. Do not restore a per-frame SwiftUI clock for this decorative movement. |
 | Diagnostics | Off by default. `SCRAWL_DIAGNOSTICS=1` is opt-in; redact complete URL tokens before output. No unconditional logging of captured metadata. |
 | Dependencies | Preserve fixed Rustls and the checked-arithmetic Grid backport. Do not downgrade security fixes to match an upstream lockfile. Remove the backport only when a compatible fixed upstream dependency replaces it and its regression passes. |
 | Packaging | Sign/archive in temporary storage outside synced Documents. Produce a local zip without installing, launching or publishing. Never use upstream signing/notarization credentials. Ad-hoc signing is the default; the owner may explicitly configure their own signing identity. |

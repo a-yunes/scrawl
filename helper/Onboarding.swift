@@ -341,24 +341,6 @@ struct Spinner: View {
 
 // MARK: Illustrations
 
-struct WelcomeArt: View {
-  let icon: NSImage?
-
-  var body: some View {
-    Looping(period: 4) { t in
-      ZStack {
-        Circle().fill(Palette.ink.opacity(0.22)).frame(width: 150, height: 150).blur(radius: 46)
-        if let icon {
-          Image(nsImage: icon).resizable().interpolation(.high).frame(width: 128, height: 128)
-        } else {
-          RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Palette.surface).frame(width: 112, height: 112)
-        }
-      }
-      .offset(y: -3 * sin(t * 2 * .pi))
-    }
-  }
-}
-
 struct TryArt: View {
   let shortcut: String
 
@@ -554,7 +536,7 @@ struct OnboardingView: View {
         switch state.step {
         case "try-it": TryArt(shortcut: s)
         case "done": DoneArt()
-        default: WelcomeArt(icon: model.icon)
+        default: WelcomeArt(icon: model.icon, fixedPhase: onboardingFixedPhase)
         }
       }
       .frame(height: 200)

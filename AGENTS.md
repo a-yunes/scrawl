@@ -25,6 +25,9 @@ an explicit user-requested scope change.
 - Run `python3 scripts/check-local-only.py`, `python3 scripts/test-local-only.py`,
   and the grid release-mode overflow regression after changes to the privacy
   boundary or dependencies.
+- For welcome-animation changes, follow [docs/welcome-motion.md](docs/welcome-motion.md)
+  and verify the production view live. Fixed-phase still renders are not proof
+  of animation smoothness.
 - Preserve the grid backport record until the pinned layout dependency can be
   upgraded to an upstream fixed version. Do not hide maintenance advisories.
 - Do not use em dashes in newly authored documentation or user-facing text.
