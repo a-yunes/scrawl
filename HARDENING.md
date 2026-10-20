@@ -1,6 +1,9 @@
 # Local-only hardening
 
-Base: upstream commit `5a55a8649a2f053bac5a44145d81e1e079ea3228`.
+Original hardening base: upstream commit `5a55a8649a2f053bac5a44145d81e1e079ea3228`.
+See [EXCLUSIONS.md](EXCLUSIONS.md) for the current upstream baseline, canonical
+exclusions/deviations and sync procedure. Verification below is historical and
+does not automatically apply to a later sync.
 
 ## Removed capabilities
 

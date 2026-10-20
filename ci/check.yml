@@ -21,6 +21,7 @@ jobs:
       - name: Install Metal compiler
         run: xcrun --sdk macosx metal --version || xcodebuild -downloadComponent MetalToolchain
       - run: python3 scripts/check-local-only.py
+      - run: python3 scripts/test-local-only.py
       - run: cargo build --locked -j 3
       - run: cargo test --locked -j 3 -- --test-threads=2
       - run: ./scripts/test-grid-backport.sh

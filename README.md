@@ -7,6 +7,9 @@ Press Option-Shift-S to record, speak and draw with Shift, then press the shortc
 again to finish. Review the capture and use Option-Shift-V to paste it into the
 application you choose. Scrawl Local does not send prompts to agents.
 
+For upstream syncs, follow [EXCLUSIONS.md](EXCLUSIONS.md), the canonical list of
+features this fork removes and behavior it intentionally changes.
+
 ## Privacy boundaries
 
 - No phone capture or upload server, browser SDK, browser URL lookup, automatic
